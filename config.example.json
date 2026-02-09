@@ -1,0 +1,9 @@
+{
+  "addresses": [
+    "ltc1qYOUR_FIRST_ADDRESS_HERE",
+    "ltc1qYOUR_SECOND_ADDRESS_HERE"
+  ],
+  "target_profit_percent": 3.0,
+  "currency": "usd",
+  "max_transactions_per_address": 500
+}

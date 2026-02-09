@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LTC Cost Basis Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #080c14; --surface: #0f1520; --border: #1a2235;
+    --text: #c0c8d8; --text-dim: #4a5670; --text-bright: #e6ecf5;
+    --blue: #4a8ceb; --purple: #a78bfa; --green: #34d399;
+    --red: #f87171; --amber: #f59e0b;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --font-sans: 'DM Sans', system-ui, sans-serif;
+  }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-mono); font-size: 13px;
+    min-height: 100vh; padding: 24px;
+    background-image: radial-gradient(ellipse at 50% 0%, rgba(74,140,235,0.04) 0%, transparent 60%);
+  }
+
+  .container { max-width: 1000px; margin: 0 auto; }
+
+  /* Header */
+  .header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  .logo {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, #2a5298, #4a8ceb);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700; color: #fff;
+    box-shadow: 0 0 24px rgba(74,140,235,0.25);
+  }
+  .header h1 { font-family: var(--font-sans); font-size: 22px; font-weight: 700; color: var(--text-bright); letter-spacing: -0.5px; }
+  .header p { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .last-updated { font-size: 10px; color: var(--text-dim); margin-bottom: 20px; margin-left: 58px; }
+
+  /* Status Banner */
+  .status-banner {
+    border-radius: 10px; padding: 16px 20px; margin-bottom: 20px;
+    text-align: center; font-family: var(--font-sans);
+  }
+  .status-banner.target-hit { background: linear-gradient(135deg, #0a2015, #0f1520); border: 1px solid #1a4a2e; }
+  .status-banner.target-miss { background: var(--surface); border: 1px solid var(--border); }
+  .status-banner h2 { font-size: 20px; margin-bottom: 4px; }
+  .status-banner p { font-size: 12px; color: var(--text-dim); }
+
+  /* Cards Grid */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; position: relative; overflow: hidden;
+  }
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent-color, var(--blue)), transparent);
+  }
+  .card .label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--text-dim); margin-bottom: 8px;
+  }
+  .card .value {
+    font-family: var(--font-sans); font-size: 20px; font-weight: 700;
+    color: var(--text-bright);
+  }
+  .card .sub { font-size: 11px; margin-top: 4px; opacity: 0.85; }
+
+  /* Profit Slider */
+  .slider-section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 20px;
+  }
+  .slider-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .slider-header span:first-child { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-dim); }
+  .slider-header span:last-child { font-size: 16px; font-weight: 600; color: var(--green); font-family: var(--font-sans); }
+  input[type=range] { width: 100%; accent-color: var(--green); height: 4px; cursor: pointer; }
+  .slider-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; margin-bottom: 0; }
+  .tab {
+    padding: 8px 16px; font-size: 11px; font-family: var(--font-mono);
+    text-transform: uppercase; letter-spacing: 1px; cursor: pointer;
+    background: var(--surface); color: var(--text-dim);
+    border: 1px solid var(--border); border-bottom: none;
+    border-radius: 8px 8px 0 0; transition: all 0.15s;
+  }
+  .tab.active { color: var(--text-bright); background: #141c2c; border-color: #253350; }
+  .tab:hover { color: var(--text); }
+
+  /* Table */
+  .table-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 0 10px 10px 10px; padding: 0; overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; padding: 12px 12px 10px; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);
+    border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+    white-space: nowrap;
+  }
+  thead th:hover { color: var(--text); }
+  tbody td {
+    padding: 10px 12px; border-bottom: 1px solid #111827;
+    font-size: 12px; white-space: nowrap;
+  }
+  tbody tr:hover { background: rgba(74,140,235,0.03); }
+  .type-receive { color: var(--green); }
+  .type-spend { color: var(--red); }
+  .amount-col { text-align: right; font-weight: 500; color: var(--text-bright); }
+  .price-col { text-align: right; color: var(--purple); }
+  .total-col { text-align: right; color: var(--text-dim); }
+  .addr-col { font-size: 10px; color: var(--text-dim); }
+
+  /* Filter */
+  .filter-bar {
+    display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; align-items: center;
+  }
+  .filter-btn {
+    padding: 4px 10px; font-size: 10px; font-family: var(--font-mono);
+    background: none; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text-dim); cursor: pointer; transition: all 0.15s;
+  }
+  .filter-btn.active { color: var(--text-bright); border-color: var(--blue); background: rgba(74,140,235,0.1); }
+  .filter-btn:hover { border-color: var(--text-dim); }
+
+  .search-input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 4px 8px; color: var(--text); font-size: 11px; font-family: var(--font-mono);
+    outline: none; margin-left: auto; width: 160px;
+  }
+
+  /* Empty state */
+  .empty {
+    text-align: center; padding: 40px; color: var(--text-dim);
+    font-family: var(--font-sans);
+  }
+  .empty h3 { font-size: 16px; color: var(--text); margin-bottom: 8px; }
+
+  /* Addresses */
+  .addr-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+  .addr-chip {
+    font-size: 10px; padding: 4px 10px; border-radius: 4px;
+    background: rgba(74,140,235,0.08); border: 1px solid rgba(74,140,235,0.15);
+    color: var(--blue); letter-spacing: 0.3px;
+  }
+
+  .footer { text-align: center; font-size: 10px; color: #1a2235; margin-top: 30px; padding-bottom: 16px; }
+
+  .refresh-btn {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 14px; color: var(--text-dim); font-size: 11px;
+    font-family: var(--font-mono); cursor: pointer; transition: all 0.15s;
+  }
+  .refresh-btn:hover { color: var(--text); border-color: var(--text-dim); }
+
+  /* Daily breakdown */
+  .daily-table td { font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="container" id="app">
+  <div class="empty">
+    <h3>Loading...</h3>
+    <p>Looking for data.json</p>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script>
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+const fmt = (n, dec = 2) => Number(n).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+const fmtUSD = (n) => '$' + fmt(n);
+
+let DATA = null;
+let state = {
+  targetProfit: 3,
+  filter: 'all',     // all, receive, spend
+  search: '',
+  sortField: 'timestamp',
+  sortDir: 'desc',
+  activeTab: 'transactions',  // transactions, daily
+};
+
+// --- Load data ---
+function loadData() {
+  if (typeof LTC_DATA !== 'undefined') {
+    DATA = LTC_DATA;
+    state.targetProfit = DATA.config?.target_profit_percent || 3;
+    render();
+  } else {
+    $('#app').innerHTML = `
+      <div class="header"><div class="logo">Ł</div><div><h1>LTC Cost Basis Tracker</h1><p>Weighted average cost · Target sell price</p></div></div>
+      <div class="empty" style="margin-top:40px">
+        <h3>No data.js found</h3>
+        <p style="margin-top:8px">Run <code style="color:var(--blue)">python tracker.py</code> first to generate data.<br>
+        Make sure <code style="color:var(--blue)">data.js</code> is in the same folder as this HTML file.</p>
+      </div>`;
+  }
+}
+
+// --- Recalculate summary with new target profit ---
+function recalcSummary() {
+  if (!DATA) return DATA?.summary || {};
+  const txs = DATA.transactions || [];
+  const receives = txs.filter(t => t.type === 'receive' && t.price_usd);
+  const spends = txs.filter(t => t.type === 'spend' && t.price_usd);
+
+  const totalReceivedLTC = receives.reduce((s, t) => s + t.amount_ltc, 0);
+  const totalCost = receives.reduce((s, t) => s + t.amount_ltc * t.price_usd, 0);
+  const totalSpentLTC = spends.reduce((s, t) => s + t.amount_ltc, 0);
+  const balanceLTC = totalReceivedLTC - totalSpentLTC;
+  const avgCost = totalReceivedLTC > 0 ? totalCost / totalReceivedLTC : 0;
+  const remainingCost = avgCost * balanceLTC;
+  const targetSell = avgCost * (1 + state.targetProfit / 100);
+  const currentPrice = DATA.summary?.current_price_usd;
+  const currentValue = currentPrice ? balanceLTC * currentPrice : null;
+  const pl = currentValue !== null ? currentValue - remainingCost : null;
+  const plPct = remainingCost > 0 && pl !== null ? (pl / remainingCost) * 100 : null;
+
+  return {
+    balance_ltc: balanceLTC,
+    total_received_ltc: totalReceivedLTC,
+    total_spent_ltc: totalSpentLTC,
+    total_cost_usd: totalCost,
+    remaining_cost_usd: remainingCost,
+    avg_cost_basis_usd: avgCost,
+    target_profit_pct: state.targetProfit,
+    target_sell_price_usd: targetSell,
+    current_price_usd: currentPrice,
+    current_value_usd: currentValue,
+    unrealized_pl_usd: pl,
+    unrealized_pl_pct: plPct,
+    total_receives: receives.length,
+    total_spends: spends.length,
+    total_transactions: receives.length + spends.length,
+  };
+}
+
+// --- Render ---
+function render() {
+  if (!DATA) return;
+  const s = recalcSummary();
+  const txs = DATA.transactions || [];
+  const addrs = DATA.config?.addresses || [];
+
+  let html = '';
+
+  // Header
+  html += `
+    <div class="header">
+      <div class="logo">Ł</div>
+      <div>
+        <h1>LTC Cost Basis Tracker</h1>
+        <p>Weighted average cost · Target sell price</p>
+      </div>
+    </div>`;
+
+  if (DATA.last_updated) {
+    const d = new Date(DATA.last_updated);
+    html += `<div class="last-updated">Last synced: ${d.toLocaleString()} &nbsp;
+      <button class="refresh-btn" onclick="loadData()">↻ Reload</button></div>`;
+  }
+
+  // Addresses
+  if (addrs.length) {
+    html += `<div class="addr-list">${addrs.map(a =>
+      `<span class="addr-chip">${a.slice(0,6)}...${a.slice(-6)}</span>`
+    ).join('')}</div>`;
+  }
+
+  // Status banner
+  if (s.current_price_usd && s.avg_cost_basis_usd > 0) {
+    if (s.current_price_usd >= s.target_sell_price_usd) {
+      const profit = s.current_value_usd - s.remaining_cost_usd;
+      html += `<div class="status-banner target-hit">
+        <h2 style="color:var(--green)">✓ Target Reached!</h2>
+        <p>Current price (${fmtUSD(s.current_price_usd)}) is above your ${state.targetProfit}% target (${fmtUSD(s.target_sell_price_usd)}).
+        Selling now would net ${fmtUSD(profit)} profit.</p>
+      </div>`;
+    } else {
+      const diff = s.target_sell_price_usd - s.current_price_usd;
+      const pctNeeded = (diff / s.current_price_usd * 100);
+      html += `<div class="status-banner target-miss">
+        <h2 style="color:var(--amber)">${fmtUSD(diff)} below target</h2>
+        <p>LTC needs to rise ${fmt(pctNeeded)}% from current price to hit your ${state.targetProfit}% profit target.</p>
+      </div>`;
+    }
+  }
+
+  // Cards
+  const plColor = s.unrealized_pl_usd !== null ? (s.unrealized_pl_usd >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--amber)';
+  html += `<div class="cards">
+    <div class="card" style="--accent-color:var(--blue)">
+      <div class="label">Balance</div>
+      <div class="value">${fmt(s.balance_ltc, 4)} LTC</div>
+      <div class="sub" style="color:var(--text-dim)">Received: ${fmt(s.total_received_ltc,4)} · Spent: ${fmt(s.total_spent_ltc,4)}</div>
+    </div>
+    <div class="card" style="--accent-color:var(--purple)">
+      <div class="label">Avg Cost Basis</div>
+      <div class="value">${s.avg_cost_basis_usd > 0 ? fmtUSD(s.avg_cost_basis_usd) : '—'}</div>
+      <div class="sub" style="color:var(--text-dim)">Total cost: ${fmtUSD(s.total_cost_usd)}</div>
+    </div>
+    <div class="card" style="--accent-color:var(--green)">
+      <div class="label">Target Sell (${fmt(state.targetProfit,1)}%)</div>
+      <div class="value">${s.avg_cost_basis_usd > 0 ? fmtUSD(s.target_sell_price_usd) : '—'}</div>
+      <div class="sub" style="color:var(--green)">${s.avg_cost_basis_usd > 0 ? 'Profit: ' + fmtUSD(s.target_sell_price_usd * s.balance_ltc - s.remaining_cost_usd) : ''}</div>
+    </div>
+    <div class="card" style="--accent-color:${plColor}">
+      <div class="label">Current Price</div>
+      <div class="value">${s.current_price_usd ? fmtUSD(s.current_price_usd) : '—'}</div>
+      ${s.unrealized_pl_usd !== null ? `<div class="sub" style="color:${plColor}">P/L: ${s.unrealized_pl_usd >= 0?'+':''}${fmtUSD(s.unrealized_pl_usd)} (${s.unrealized_pl_pct >= 0?'+':''}${fmt(s.unrealized_pl_pct)}%)</div>` : ''}
+    </div>
+  </div>`;
+
+  // Slider
+  html += `<div class="slider-section">
+    <div class="slider-header">
+      <span>Target Profit</span>
+      <span id="slider-val">${fmt(state.targetProfit,1)}%</span>
+    </div>
+    <input type="range" min="0.5" max="50" step="0.5" value="${state.targetProfit}" id="profit-slider">
+    <div class="slider-labels"><span>0.5%</span><span>50%</span></div>
+  </div>`;
+
+  // Tabs
+  html += `<div class="tabs">
+    <div class="tab ${state.activeTab==='transactions'?'active':''}" data-tab="transactions">Transactions (${s.total_transactions})</div>
+    <div class="tab ${state.activeTab==='daily'?'active':''}" data-tab="daily">Daily Summary</div>
+  </div>`;
+
+  // Table content
+  html += `<div class="table-wrap">`;
+
+  if (state.activeTab === 'transactions') {
+    // Filter bar
+    html += `<div class="filter-bar">
+      <button class="filter-btn ${state.filter==='all'?'active':''}" data-filter="all">All</button>
+      <button class="filter-btn ${state.filter==='receive'?'active':''}" data-filter="receive">Receives</button>
+      <button class="filter-btn ${state.filter==='spend'?'active':''}" data-filter="spend">Spends</button>
+      <input class="search-input" type="text" placeholder="Search txid..." value="${state.search}" id="search-input">
+    </div>`;
+
+    // Filter & sort
+    let filtered = txs.filter(t => {
+      if (state.filter !== 'all' && t.type !== state.filter) return false;
+      if (state.search && !t.txid.toLowerCase().includes(state.search.toLowerCase())) return false;
+      return true;
+    });
+
+    filtered.sort((a, b) => {
+      const mul = state.sortDir === 'asc' ? 1 : -1;
+      if (state.sortField === 'timestamp') return mul * a.timestamp.localeCompare(b.timestamp);
+      if (state.sortField === 'amount_ltc') return mul * (a.amount_ltc - b.amount_ltc);
+      if (state.sortField === 'price_usd') return mul * ((a.price_usd||0) - (b.price_usd||0));
+      return 0;
+    });
+
+    const arrow = (f) => state.sortField === f ? (state.sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+
+    if (filtered.length === 0) {
+      html += `<div class="empty"><h3>No transactions</h3><p>Run tracker.py to sync</p></div>`;
+    } else {
+      html += `<table>
+        <thead><tr>
+          <th data-sort="timestamp">Date${arrow('timestamp')}</th>
+          <th>Type</th>
+          <th style="text-align:right" data-sort="amount_ltc">LTC${arrow('amount_ltc')}</th>
+          <th style="text-align:right" data-sort="price_usd">Price${arrow('price_usd')}</th>
+          <th style="text-align:right">Total</th>
+          <th>Address</th>
+          <th>TxID</th>
+        </tr></thead><tbody>`;
+
+      for (const tx of filtered) {
+        const typeClass = tx.type === 'receive' ? 'type-receive' : 'type-spend';
+        const total = tx.price_usd ? tx.amount_ltc * tx.price_usd : null;
+        const shortAddr = tx.addresses ? tx.addresses.map(a => a.slice(0,6) + '..').join(', ') : (tx.address ? tx.address.slice(0,6) + '...' + tx.address.slice(-4) : '');
+        const shortTx = tx.txid ? tx.txid.slice(0,10) + '...' : '';
+        const txUrl = `https://blockchair.com/litecoin/transaction/${tx.txid}`;
+
+        html += `<tr>
+          <td>${tx.date}</td>
+          <td class="${typeClass}">${tx.type === 'receive' ? '↓ IN' : '↑ OUT'}</td>
+          <td class="amount-col">${fmt(tx.amount_ltc, 6)}</td>
+          <td class="price-col">${tx.price_usd ? fmtUSD(tx.price_usd) : '—'}</td>
+          <td class="total-col">${total ? fmtUSD(total) : '—'}</td>
+          <td class="addr-col" title="${tx.address || ''}">${shortAddr}</td>
+          <td class="addr-col"><a href="${txUrl}" target="_blank" style="color:var(--blue);text-decoration:none" title="${tx.txid}">${shortTx}</a></td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+  } else {
+    // Daily summary
+    const dailyMap = {};
+    for (const tx of txs) {
+      if (!dailyMap[tx.date]) dailyMap[tx.date] = { received: 0, spent: 0, price: tx.price_usd };
+      if (tx.type === 'receive') dailyMap[tx.date].received += tx.amount_ltc;
+      else dailyMap[tx.date].spent += tx.amount_ltc;
+      if (tx.price_usd) dailyMap[tx.date].price = tx.price_usd;
+    }
+
+    const days = Object.entries(dailyMap).sort((a, b) => b[0].localeCompare(a[0]));
+
+    html += `<table class="daily-table">
+      <thead><tr>
+        <th>Date</th>
+        <th style="text-align:right">Received</th>
+        <th style="text-align:right">Spent</th>
+        <th style="text-align:right">Net</th>
+        <th style="text-align:right">Price</th>
+        <th style="text-align:right">Day Cost</th>
+      </tr></thead><tbody>`;
+
+    for (const [date, d] of days) {
+      const net = d.received - d.spent;
+      const netClass = net >= 0 ? 'type-receive' : 'type-spend';
+      const dayCost = d.price ? d.received * d.price : null;
+      html += `<tr>
+        <td>${date}</td>
+        <td class="amount-col" style="color:var(--green)">${d.received > 0 ? '+' + fmt(d.received, 6) : '—'}</td>
+        <td class="amount-col" style="color:var(--red)">${d.spent > 0 ? '-' + fmt(d.spent, 6) : '—'}</td>
+        <td class="amount-col ${netClass}">${net >= 0 ? '+' : ''}${fmt(net, 6)}</td>
+        <td class="price-col">${d.price ? fmtUSD(d.price) : '—'}</td>
+        <td class="total-col">${dayCost ? fmtUSD(dayCost) : '—'}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+
+  html += `</div>`; // table-wrap
+
+  html += `<div class="footer">Run <code>python tracker.py</code> to sync new transactions · Prices via CoinGecko · Transactions via Blockcypher</div>`;
+
+  $('#app').innerHTML = html;
+  bindEvents();
+}
+
+function bindEvents() {
+  // Slider
+  const slider = $('#profit-slider');
+  if (slider) {
+    slider.addEventListener('input', (e) => {
+      state.targetProfit = parseFloat(e.target.value);
+      render();
+    });
+  }
+
+  // Tabs
+  $$('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      state.activeTab = tab.dataset.tab;
+      render();
+    });
+  });
+
+  // Filter buttons
+  $$('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.filter = btn.dataset.filter;
+      render();
+    });
+  });
+
+  // Sort
+  $$('thead th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.sort;
+      if (state.sortField === field) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      else { state.sortField = field; state.sortDir = 'desc'; }
+      render();
+    });
+  });
+
+  // Search
+  const searchInput = $('#search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      state.search = e.target.value;
+      render();
+    });
+  }
+}
+
+// Start
+loadData();
+</script>
+</body>
+</html>
